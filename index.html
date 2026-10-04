@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PavéDesign — Prototype V1</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,sans-serif;background:#eef1f4;color:#17202a}
+header{height:58px;background:#18222d;color:white;display:flex;align-items:center;padding:0 16px;gap:18px}
+header b{font-size:19px}.actions{margin-left:auto;display:flex;gap:8px}
+button,select,input{font:inherit}button{border:1px solid #c9d0d6;background:white;border-radius:7px;padding:8px 11px;cursor:pointer}button:hover{background:#f3f5f7}
+main{display:grid;grid-template-columns:210px 1fr 245px;height:calc(100vh - 58px)}
+aside{background:#fff;padding:14px;border-right:1px solid #d7dde2;overflow:auto}.right{border-right:0;border-left:1px solid #d7dde2}
+h3{margin:6px 0 12px;font-size:14px}.tool{width:100%;text-align:left;margin-bottom:7px}
+.tool.active{background:#dfe9f0;border-color:#9eb5c5;font-weight:700}
+label{display:block;font-size:12px;margin:10px 0 4px;color:#53606b}
+input,select{width:100%;padding:7px;border:1px solid #c9d0d6;border-radius:6px}
+.stage{position:relative;overflow:hidden;background:#dfe3e6}
+canvas{width:100%;height:100%;display:block}
+.mode{position:absolute;top:10px;left:50%;transform:translateX(-50%);background:#fff;padding:5px;border-radius:8px;box-shadow:0 2px 10px #0002}
+.mode button{border:0}.mode .on{background:#18222d;color:white}
+.info{font-size:12px;color:#64717b;line-height:1.45}
+hr{border:0;border-top:1px solid #e1e5e8;margin:15px 0}
+</style>
+</head>
+<body>
+<header>
+<b>🧱 PavéDesign</b><span id="projectTitle">Projet sans dimension</span>
+<div class="actions">
+<button onclick="newProject()">Nouveau</button>
+<button onclick="saveProject()">Enregistrer</button>
+<button onclick="loadProject()">Ouvrir</button>
+</div>
+</header>
+<main>
+<aside>
+<h3>OUTILS</h3>
+<button class="tool active" data-tool="select">↖ Sélection</button>
+<button class="tool" data-tool="rect">▭ Surface</button>
+<button class="tool" data-tool="free">✎ Dessin libre</button>
+<button class="tool" data-tool="paver">▦ Pavé</button>
+<button class="tool" data-tool="border">▱ Bordure</button>
+<button class="tool" data-tool="measure">↔ Mesure</button>
+<hr>
+<h3>MODE DE PROJET</h3>
+<button onclick="setScale(false)" class="tool">🔵 Design libre</button>
+<button onclick="setScale(true)" class="tool">📐 Dimensions réelles</button>
+<hr>
+<h3>PRODUIT</h3>
+<label>Type</label><select id="product"><option>Grand format</option><option>Petit format</option><option>Rectangulaire</option><option>Dalle</option><option>Bordure</option></select>
+<label>Couleur</label><select id="material"><option>Gris</option><option>Beige</option><option>Charbon</option><option>Mélangé</option></select>
+<p class="info">Prototype V1 : la bibliothèque de produits pourra être remplacée par une vraie bibliothèque Techo-Bloc lorsque les données/images autorisées seront intégrées.</p>
+</aside>
+
+<section class="stage">
+<div class="mode"><button id="m2d" class="on" onclick="view='2d';draw()">2D</button><button id="m3d" onclick="view='3d';draw()">3D</button></div>
+<canvas id="c"></canvas>
+</section>
+
+<aside class="right">
+<h3>PROJET</h3>
+<label>Nom</label><input id="name" value="Nouveau projet" oninput="projectTitle.textContent=this.value">
+<label>Largeur (optionnel)</label><input id="width" type="number" placeholder="ex. 30">
+<label>Longueur (optionnel)</label><input id="length" type="number" placeholder="ex. 40">
+<label>Unité</label><select id="unit"><option>pieds</option><option>mètres</option></select>
+<hr>
+<h3>SÉLECTION</h3>
+<div id="selection" class="info">Aucun élément sélectionné.</div>
+<hr>
+<h3>QUANTITÉS — APERÇU</h3>
+<div id="stats" class="info">0 éléments<br>Superficie : —</div>
+</aside>
+</main>
+<script>
+const c=document.getElementById('c'),ctx=c.getContext('2d');let tool='select',view='2d',scaleMode=false;
+let items=[],drawing=false,start=null,current=null,selected=null;
+function resize(){c.width=c.clientWidth*devicePixelRatio;c.height=c.clientHeight*devicePixelRatio;ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);draw()}
+addEventListener('resize',resize);resize();
+document.querySelectorAll('.tool[data-tool]').forEach(b=>b.onclick=()=>{tool=b.dataset.tool;document.querySelectorAll('.tool[data-tool]').forEach(x=>x.classList.remove('active'));b.classList.add('active')});
+function setScale(v){scaleMode=v;document.getElementById('projectTitle').textContent=v?'Projet dimensionné':'Projet sans dimension'}
+function pos(e){let r=c.getBoundingClientRect();return{x:e.clientX-r.left,y:e.clientY-r.top}}
+c.onpointerdown=e=>{let p=pos(e);drawing=true;start=p;current=p;
+ if(tool==='select'){selected=items.slice().reverse().find(o=>hit(o,p));drawing=false;updateInfo()}
+}
+c.onpointermove=e=>{if(!drawing)return;current=pos(e);draw()}
+c.onpointerup=e=>{if(!drawing)return;drawing=false;let p=pos(e);
+ if(['rect','paver','border'].includes(tool)){let x=Math.min(start.x,p.x),y=Math.min(start.y,p.y),w=Math.abs(p.x-start.x),h=Math.abs(p.y-start.y);if(w>5&&h>5)items.push({type:tool,x,y,w,h,product:product.value,material:material.value})}
+ else if(tool==='free'){items.push({type:'free',points:[start,p],material:material.value})}
+ draw();updateInfo()
+}
+function hit(o,p){return o.type==='free'?false:p.x>=o.x&&p.x<=o.x+o.w&&p.y>=o.y&&p.y<=o.y+o.h}
+function draw(){
+ let W=c.clientWidth,H=c.clientHeight;ctx.clearRect(0,0,W,H);ctx.fillStyle='#dfe3e6';ctx.fillRect(0,0,W,H);
+ ctx.strokeStyle='#c8ced3';ctx.lineWidth=1;for(let x=0;x<W;x+=25){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke()}for(let y=0;y<H;y+=25){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke()}
+ items.forEach((o,i)=>{let fill=o.material==='Beige'?'#c8b58a':o.material==='Charbon'?'#555a60':o.material==='Mélangé'?'#9b9a94':'#9aa2a8';ctx.fillStyle=fill;ctx.strokeStyle=i===selected?'#1877d2':'#4d5962';ctx.lineWidth=i===selected?3:1;
+ if(o.type==='free'){ctx.beginPath();ctx.moveTo(o.points[0].x,o.points[0].y);ctx.lineTo(o.points[1].x,o.points[1].y);ctx.stroke()}
+ else {ctx.fillRect(o.x,o.y,o.w,o.h);ctx.strokeRect(o.x,o.y,o.w,o.h);
+ if(o.type==='paver'){ctx.strokeStyle='#ffffff99';for(let x=o.x+20;x<o.x+o.w;x+=20){ctx.beginPath();ctx.moveTo(x,o.y);ctx.lineTo(x,o.y+o.h);ctx.stroke()}for(let y=o.y+20;y<o.y+o.h;y+=20){ctx.beginPath();ctx.moveTo(o.x,y);ctx.lineTo(o.x+o.w,y);ctx.stroke()}}
+ }
+ });
+ if(drawing&&['rect','paver','border'].includes(tool)){let x=Math.min(start.x,current.x),y=Math.min(start.y,current.y),w=Math.abs(current.x-start.x),h=Math.abs(current.y-start.y);ctx.setLineDash([6,5]);ctx.strokeStyle='#1877d2';ctx.strokeRect(x,y,w,h);ctx.setLineDash([])}
+ if(view==='3d')draw3dOverlay()
+ stats.innerHTML=items.length+' éléments<br>Superficie : '+(scaleMode?'calcul à venir':'non définie')
+}
+function draw3dOverlay(){ctx.fillStyle='#0006';ctx.fillRect(0,0,c.clientWidth,c.clientHeight);ctx.fillStyle='white';ctx.font='20px system-ui';ctx.fillText('Vue 3D — moteur 3D à intégrer en V2',25,45)}
+function updateInfo(){selection.innerHTML=selected?`Type : ${selected.type}<br>Produit : ${selected.product||'—'}<br>Couleur : ${selected.material||'—'}`:'Aucun élément sélectionné.'}
+function newProject(){items=[];selected=null;document.getElementById('name').value='Nouveau projet';projectTitle.textContent='Projet sans dimension';draw();updateInfo()}
+function saveProject(){let data={name:name.value,width:width.value,length:length.value,unit:unit.value,scaleMode,items};let a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));a.download=(name.value||'projet')+'.pavedesign.json';a.click()}
+function loadProject(){let i=document.createElement('input');i.type='file';i.accept='.json';i.onchange=()=>{let f=i.files[0],r=new FileReader();r.onload=()=>{let d=JSON.parse(r.result);name.value=d.name||'Projet';projectTitle.textContent=name.value;width.value=d.width||'';length.value=d.length||'';unit.value=d.unit||'pieds';scaleMode=!!d.scaleMode;items=d.items||[];draw();updateInfo()};r.readAsText(f)};i.click()}
+</script>
+</body></html>
